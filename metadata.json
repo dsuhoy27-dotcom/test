@@ -1,0 +1,6 @@
+{
+  "name": "Аудит 152-ФЗ — Сканер сайтов",
+  "description": "SaaS-сервис автоматического аудита сайтов на соответствие Федеральному закону № 152-ФЗ «О персональных данных»",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
