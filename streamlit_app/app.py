@@ -303,27 +303,97 @@ def run_full_audit(target_url: str) -> AuditReport:
             trackers.append("Tilda Analytics")
 
         cookie_selectors = [
-            '[class*="cookie"]', '[id*="cookie"]', '[class*="consent"]', '[id*="consent"]',
-            '[class*="cookie-banner"]', '[class*="cookie-popup"]', '[class*="cookie-modal"]'
+            '[class*="cookie"]', '[id*="cookie"]', '[class*="cookies"]', '[id*="cookies"]',
+            '[class*="consent"]', '[id*="consent"]', '[class*="cookie-banner"]',
+            '[class*="cookie-popup"]', '[class*="cookie-modal"]', '[class*="cookie-notice"]',
+            '[class*="cookie-alert"]', '[class*="cookie-bar"]', '[class*="cookie-warning"]'
         ]
         cookie_detected = False
         has_accept_button = False
         raw_banner_text = ""
+        banner_type = "none"
 
+        def is_accept_element(el_tag) -> bool:
+            """Проверяет, является ли элемент кнопкой принятия Cookie."""
+            txt = el_tag.get_text(strip=True).lower()
+            val = (el_tag.get("value") or "").lower()
+            cls = " ".join(el_tag.get("class") or []).lower()
+            el_id = (el_tag.get("id") or "").lower()
+            comb = f"{txt} {val} {cls} {el_id}"
+
+            keywords = [
+                "принять", "согласен", "я согласен", "согласен(а)", "понятно",
+                "разрешить", "принять все", "ок", "хорошо", "соглашаюсь", "да",
+                "accept", "agree", "allow", "got it", "i agree"
+            ]
+            return (
+                any(txt == w or txt.startswith(w) or (len(txt) < 30 and w in txt) for w in keywords) or
+                "hide_popup" in comb or
+                "cookie_accept" in comb or
+                "cookie-accept" in comb or
+                "accept-cookie" in comb
+            )
+
+        # 1. Поиск по типичным CSS-селекторам
         for selector in cookie_selectors:
             elements = soup.select(selector)
             for el in elements:
                 t = el.get_text(strip=True).lower()
-                if "cookie" in t or "куки" in t or "персонализац" in t or "файлы" in t:
+                if any(w in t for w in ["cookie", "куки", "персонализац", "файлы"]):
                     cookie_detected = True
                     raw_banner_text = el.get_text(" ", strip=True)[:250]
-                    # Проверка кнопки согласия
-                    btn_text = " ".join([b.get_text(strip=True).lower() for b in el.find_all(["button", "a", "input"])])
-                    if any(w in btn_text for w in ["принять", "согласен", "понятно", "разрешить", "ок", "accept", "agree"]):
-                        has_accept_button = True
+                    banner_type = "modal_banner" if any(c in el.get("class", []) or c in el.get("id", "") for c in ["modal", "popup", "overlay"]) else "fixed_bottom"
+                    for b in el.find_all(["button", "a", "div", "span", "input"]):
+                        if is_accept_element(b):
+                            has_accept_button = True
+                            break
                     break
             if cookie_detected:
                 break
+
+        # 2. Глубокий поиск по текстовым узлам DOM (для нестандартных оверлеев вроде redbee.ru)
+        if not cookie_detected:
+            cookie_re = re.compile(r"(cookie|куки|файлы\s*[\-–—]?\s*cookie)", re.IGNORECASE)
+            for node in soup.find_all(string=cookie_re):
+                parent = node.parent
+                depth = 0
+                while parent and depth < 6:
+                    ctext = parent.get_text(" ", strip=True)
+                    if 25 <= len(ctext) <= 800 and cookie_re.search(ctext):
+                        cookie_detected = True
+                        raw_banner_text = ctext[:250]
+                        parent_id = str(parent.get("id") or "")
+                        parent_cls = " ".join(parent.get("class") or [])
+                        banner_type = "modal_banner" if any(k in f"{parent_id} {parent_cls}".lower() for k in ["modal", "popup", "overlay"]) else "fixed_bottom"
+                        for b in parent.find_all(["button", "a", "div", "span", "input"]):
+                            if is_accept_element(b):
+                                has_accept_button = True
+                                break
+                        break
+                    parent = parent.parent
+                    depth += 1
+                if cookie_detected:
+                    break
+
+        # 3. Анализ скриптов согласий (hide_popup_cookie, cookie_consent и др.)
+        if not cookie_detected and any(s in lower_html for s in ["hide_popup_cookie", "cookie_consent", "cookie_agree"]):
+            cookie_detected = True
+            banner_type = "modal_banner"
+            has_accept_button = True
+            raw_banner_text = "Обнаружен скрипт управления согласием на обработку Cookie (hide_popup_cookie)."
+
+        # 4. Анализ явных текстовых формулировок
+        if not cookie_detected:
+            strong_phrases = [
+                "мы используем файлы cookie", "мы используем cookie", "наш сайт использует файлы cookie",
+                "продолжая использовать сайт, вы соглашаетесь", "используются cookie", "файлы cookie"
+            ]
+            if any(p in lower_html for p in strong_phrases):
+                cookie_detected = True
+                banner_type = "fixed_bottom"
+                raw_banner_text = "Обнаружено текстовое уведомление об использовании файлов Cookie."
+                if any(w in lower_html for w in ["принять", "согласен", "понятно", "ок", "разрешить"]):
+                    has_accept_button = True
 
         cookie_violations = []
         if not cookie_detected:

@@ -400,41 +400,72 @@ class WebsiteParserService:
     async def _detect_cookie_banner(cls, page: Page, soup: BeautifulSoup) -> CookieBannerAudit:
         """Поиск плашек и модальных окон уведомления о Cookie."""
         page_text = soup.get_text().lower()
-        has_cookie_mention = any(kw in page_text for kw in cls.COOKIE_KEYWORDS)
+        cookie_re = re.compile(r"(cookie|куки|файлы\s*[\-–—]?\s*cookie)", re.IGNORECASE)
+        has_cookie_mention = bool(cookie_re.search(page_text)) or any(kw in page_text for kw in cls.COOKIE_KEYWORDS)
 
         if not has_cookie_mention:
             return CookieBannerAudit(detected=False)
 
-        # Поиск плашек с характерными классами/id или fixed-элементами
+        def is_accept_element(tag) -> bool:
+            t = tag.get_text(strip=True).lower()
+            val = (tag.get("value") or "").lower()
+            cls_str = " ".join(tag.get("class") or []).lower()
+            tid = (tag.get("id") or "").lower()
+            comb = f"{t} {val} {cls_str} {tid}"
+            keywords = ["принять", "согласен", "понятно", "хорошо", "ok", "ок", "accept", "закрыть", "разрешить"]
+            return any(w == t or t.startswith(w) or w in comb for w in keywords) or "hide_popup" in comb
+
+        raw_text = None
+        has_accept_btn = False
+        banner_type = "fixed_notice"
+
+        # 1. Поиск по характерным селекторам
         banner_elements = soup.find_all(
             lambda tag: tag.name in ("div", "section", "aside") and
             any(c in (tag.get("class") or []) or c in (tag.get("id") or "")
-                for c in ["cookie", "cookies", "cookie-banner", "cookie-popup", "cookie-notice", "cookie-modal", "cookie-consent"])
+                for c in ["cookie", "cookies", "cookie-banner", "cookie-popup", "cookie-notice", "cookie-modal", "cookie-consent", "overlay"])
         )
 
-        raw_text = None
-        if banner_elements:
-            raw_text = banner_elements[0].get_text(" ", strip=True)[:250]
-        else:
-            # Ищем блок с текстом про куки
-            for tag in soup.find_all(["div", "p", "span"]):
-                t = tag.get_text().lower()
-                if "cookie" in t or "куки" in t:
-                    if len(t) < 300:
-                        raw_text = tag.get_text(" ", strip=True)
+        for b_el in banner_elements:
+            b_text = b_el.get_text(" ", strip=True)
+            if cookie_re.search(b_text) and 20 <= len(b_text) <= 800:
+                raw_text = b_text[:250]
+                banner_type = "modal_banner" if any(c in f"{b_el.get('id','')} {' '.join(b_el.get('class',[]))}".lower() for c in ["modal", "popup", "overlay"]) else "fixed_notice"
+                for el in b_el.find_all(["button", "a", "div", "span", "input"]):
+                    if is_accept_element(el):
+                        has_accept_btn = True
                         break
+                break
 
-        # Проверка наличия кнопки согласия («Принять», «OK», «Согласен»)
-        has_accept_btn = False
-        if raw_text:
+        # 2. Поиск по родительским контейнерам текстовых узлов
+        if not raw_text:
+            for node in soup.find_all(string=cookie_re):
+                curr = node.parent
+                depth = 0
+                while curr and depth < 6:
+                    ctext = curr.get_text(" ", strip=True)
+                    if 25 <= len(ctext) <= 800 and cookie_re.search(ctext):
+                        raw_text = ctext[:250]
+                        banner_type = "modal_banner" if any(c in f"{curr.get('id','')} {' '.join(curr.get('class',[]))}".lower() for c in ["modal", "popup", "overlay"]) else "fixed_notice"
+                        for el in curr.find_all(["button", "a", "div", "span", "input"]):
+                            if is_accept_element(el):
+                                has_accept_btn = True
+                                break
+                        break
+                    curr = curr.parent
+                    depth += 1
+                if raw_text:
+                    break
+
+        if not has_accept_btn and raw_text:
             text_lower = raw_text.lower()
             has_accept_btn = any(btn in text_lower for btn in ["принять", "согласен", "понятно", "хорошо", "ok", "accept", "закрыть"])
 
         return CookieBannerAudit(
             detected=True,
-            banner_type="fixed_notice",
+            banner_type=banner_type,
             has_accept_button=has_accept_btn,
-            has_policy_mention="политик" in (raw_text or "").lower(),
+            has_policy_mention="политик" in (raw_text or "").lower() or "privacy" in (raw_text or "").lower(),
             raw_banner_text=raw_text,
             is_compliant=has_accept_btn
         )

@@ -312,7 +312,38 @@ async function runBackgroundScan(taskId: string, targetUrl: string, maxPages: nu
     let rawBannerText = '';
     let bannerType = 'none';
 
-    // Check specific banner/popup element selectors
+    // Helper to check if an element represents an accept button
+    const checkAcceptButton = (container: any): boolean => {
+      let accepted = false;
+      const candidates = container.find('button, a, div, span, input[type="button"], input[type="submit"], [role="button"], .btn, [class*="button"], [class*="btn"], [id*="btn"], [id*="button"], [id*="hide"], [id*="close"], [id*="accept"], [id*="agree"]');
+      candidates.each((_: any, btn: any) => {
+        const btnText = $(btn).text().trim().toLowerCase();
+        const btnVal = ($(btn).attr('value') || '').toLowerCase();
+        const btnClass = ($(btn).attr('class') || '').toLowerCase();
+        const btnId = ($(btn).attr('id') || '').toLowerCase();
+        const bCombined = `${btnText} ${btnVal} ${btnClass} ${btnId}`;
+
+        const acceptKeywords = [
+          'принять', 'согласен', 'я согласен', 'согласен(а)', 'понятно',
+          'разрешить', 'принять все', 'ок', 'хорошо', 'соглашаюсь', 'да',
+          'accept', 'agree', 'allow', 'got it', 'i agree', 'hide_popup', 'hide-popup'
+        ];
+
+        if (
+          acceptKeywords.some(w => btnText === w || btnText.startsWith(w) || (btnText.length < 30 && btnText.includes(w))) ||
+          bCombined.includes('hide_popup') ||
+          bCombined.includes('cookie_accept') ||
+          bCombined.includes('cookie-accept') ||
+          bCombined.includes('accept-cookie')
+        ) {
+          accepted = true;
+          return false;
+        }
+      });
+      return accepted;
+    };
+
+    // 2.1 Check specific banner/popup element selectors
     const cookieSelectors = [
       '[class*="cookie"]',
       '[id*="cookie"]',
@@ -338,7 +369,6 @@ async function runBackgroundScan(taskId: string, targetUrl: string, maxPages: nu
       const el = $(selector);
       if (el.length > 0) {
         const text = el.text().trim().toLowerCase();
-        // verify container contains cookie or personal data consent text
         if (
           text.includes('cookie') ||
           text.includes('куки') ||
@@ -348,34 +378,9 @@ async function runBackgroundScan(taskId: string, targetUrl: string, maxPages: nu
           text.includes('сбор данных')
         ) {
           cookieBannerFound = true;
-          bannerType = el.is('[class*="modal"], [id*="modal"], [class*="popup"]') ? 'modal_banner' : 'fixed_bottom';
-          rawBannerText = el.text().replace(/\s+/g, ' ').trim().slice(0, 200);
-
-          // Check for Accept / Agree button inside container
-          const buttonsAndLinks = el.find('button, a, input[type="button"], input[type="submit"], [role="button"], .btn');
-          buttonsAndLinks.each((_, btn) => {
-            const btnText = $(btn).text().trim().toLowerCase();
-            const btnVal = ($(btn).attr('value') || '').toLowerCase();
-            const bCombined = `${btnText} ${btnVal}`;
-            if (
-              bCombined.includes('принять') ||
-              bCombined.includes('согласен') ||
-              bCombined.includes('я согласен') ||
-              bCombined.includes('согласен(а)') ||
-              bCombined.includes('понятно') ||
-              bCombined.includes('разрешить') ||
-              bCombined.includes('принять все') ||
-              bCombined.includes('ок') ||
-              bCombined.includes('хорошо') ||
-              bCombined.includes('соглашаюсь') ||
-              bCombined.includes('accept') ||
-              bCombined.includes('agree') ||
-              bCombined.includes('allow') ||
-              bCombined.includes('got it')
-            ) {
-              cookieHasAcceptButton = true;
-            }
-          });
+          bannerType = el.is('[class*="modal"], [id*="modal"], [class*="popup"], [id*="overlay"]') ? 'modal_banner' : 'fixed_bottom';
+          rawBannerText = el.text().replace(/\s+/g, ' ').trim().slice(0, 250);
+          cookieHasAcceptButton = checkAcceptButton(el);
 
           if (text.includes('политик') || text.includes('privacy') || text.includes('узнать больше') || text.includes('подробнее')) {
             cookieHasPolicyMention = true;
@@ -385,7 +390,48 @@ async function runBackgroundScan(taskId: string, targetUrl: string, maxPages: nu
       }
     }
 
-    // Secondary fallback: check body text for explicit cookie banner phrases
+    // 2.2 Deep DOM scan for custom popups/overlays containing cookie notice text (e.g., redbee.ru)
+    if (!cookieBannerFound) {
+      const cookieRegex = /(?:cookie|куки|файлы\s*[\-–—]?\s*cookie)/i;
+      $('*').each((_, el) => {
+        const directText = $(el).clone().children().remove().end().text().trim();
+        const fullText = $(el).text().replace(/\s+/g, ' ').trim();
+
+        if ((cookieRegex.test(directText) && directText.length > 15) || (cookieRegex.test(fullText) && $(el).children().length <= 4)) {
+          let curr = $(el);
+          for (let depth = 0; depth < 6; depth++) {
+            const containerText = curr.text().replace(/\s+/g, ' ').trim();
+            if (containerText.length >= 25 && containerText.length <= 800 && cookieRegex.test(containerText)) {
+              cookieBannerFound = true;
+              rawBannerText = containerText.slice(0, 250);
+              bannerType = curr.is('[class*="modal"], [id*="modal"], [class*="popup"], [id*="popup"], [id*="overlay"], [class*="overlay"]')
+                ? 'modal_banner'
+                : 'fixed_bottom';
+
+              cookieHasAcceptButton = checkAcceptButton(curr);
+
+              if (containerText.toLowerCase().includes('политик') || containerText.toLowerCase().includes('privacy')) {
+                cookieHasPolicyMention = true;
+              }
+              return false;
+            }
+            curr = curr.parent();
+          }
+        }
+        if (cookieBannerFound) return false;
+      });
+    }
+
+    // 2.3 Secondary script analysis fallback (e.g. inline scripts checking hide_popup_cookie or document.cookie)
+    if (!cookieBannerFound && (lowerHtml.includes('hide_popup_cookie') || lowerHtml.includes('cookie_consent') || lowerHtml.includes('cookie_agree'))) {
+      cookieBannerFound = true;
+      bannerType = 'modal_banner';
+      cookieHasAcceptButton = true;
+      cookieHasPolicyMention = lowerHtml.includes('/privacy') || lowerHtml.includes('политик');
+      rawBannerText = 'Обнаружен скрипт управления согласием на обработку Cookie.';
+    }
+
+    // 2.4 Text fallback: check body text for explicit cookie phrases
     if (!cookieBannerFound) {
       const bodyText = $('body').text().toLowerCase();
       const strongCookiePhrases = [
@@ -395,7 +441,9 @@ async function runBackgroundScan(taskId: string, targetUrl: string, maxPages: nu
         'продолжая использовать сайт, вы соглашаетесь',
         'наш сайт использует cookies',
         'использует файлы cookie для обеспечения',
-        'cookies помогают нам делать наш сайт'
+        'cookies помогают нам делать наш сайт',
+        'используются cookie',
+        'использование cookie'
       ];
       const hasStrongPhrase = strongCookiePhrases.some(phrase => bodyText.includes(phrase));
       if (hasStrongPhrase) {
