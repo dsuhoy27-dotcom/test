@@ -5,10 +5,11 @@ import { ScanProgress } from './components/ScanProgress';
 import { ReportDashboard } from './components/ReportDashboard';
 import { PythonCodeViewer } from './components/PythonCodeViewer';
 import { LawGuide } from './components/LawGuide';
+import { StreamlitEmbedView } from './components/StreamlitEmbedView';
 import { ComplianceReport, PresetSite, TaskStatusResponse } from './types';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'scanner' | 'python_code' | 'law_guide'>('scanner');
+  const [activeTab, setActiveTab] = useState<'scanner' | 'python_code' | 'law_guide' | 'streamlit_embed'>('scanner');
   const [presets, setPresets] = useState<PresetSite[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
@@ -147,6 +148,8 @@ export default function App() {
             )}
           </div>
         )}
+
+        {activeTab === 'streamlit_embed' && <StreamlitEmbedView />}
 
         {activeTab === 'python_code' && <PythonCodeViewer />}
 

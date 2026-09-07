@@ -1,9 +1,9 @@
 import React from 'react';
-import { ShieldCheck, Code2, Sparkles, FileText } from 'lucide-react';
+import { ShieldCheck, Code2, Sparkles, FileText, Layers } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'scanner' | 'python_code' | 'law_guide';
-  setActiveTab: (tab: 'scanner' | 'python_code' | 'law_guide') => void;
+  activeTab: 'scanner' | 'python_code' | 'law_guide' | 'streamlit_embed';
+  setActiveTab: (tab: 'scanner' | 'python_code' | 'law_guide' | 'streamlit_embed') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
@@ -44,6 +44,19 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
           </button>
 
           <button
+            id="tab-streamlit-btn"
+            onClick={() => setActiveTab('streamlit_embed')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+              activeTab === 'streamlit_embed'
+                ? 'bg-[#0F172A] text-white shadow-sm'
+                : 'text-[#64748B] hover:text-[#0F172A] hover:bg-white/60'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-blue-500" />
+            <span>Streamlit & iFrame</span>
+          </button>
+
+          <button
             id="tab-python-code-btn"
             onClick={() => setActiveTab('python_code')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
@@ -53,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
             }`}
           >
             <Code2 className="w-4 h-4 text-indigo-400" />
-            <span>Python Backend</span>
+            <span>FastAPI & Celery</span>
           </button>
 
           <button
