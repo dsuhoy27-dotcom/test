@@ -901,13 +901,12 @@ if report:
     st.info(report.summary_text)
 
     # Вкладки детального отчета
-    tab_summary, tab_violations, tab_forms, tab_cookies, tab_policy, tab_embed = st.tabs([
+    tab_summary, tab_violations, tab_forms, tab_cookies, tab_policy = st.tabs([
         "📊 Сводный отчет",
         f"⚠️ Нарушения ({len(report.violations)})",
         f"📝 Веб-формы ({len(report.forms_audit)})",
         "🍪 Cookie и трекеры",
-        "📄 Политика конфиденциальности",
-        "🌐 Встроить на свой сайт (iframe)"
+        "📄 Политика конфиденциальности"
     ])
 
     # Вкладка 1: Сводный отчет
@@ -1004,27 +1003,3 @@ if report:
             if report.privacy_policy_audit.policy_urls:
                 st.markdown(f"* **URL документа:** `{report.privacy_policy_audit.policy_urls[0]}`")
 
-    # Вкладка 6: Встраивание на свой сайт (iframe)
-    with tab_embed:
-        st.subheader("🌐 Встраивание сервиса на страницу вашего сайта")
-        st.write("Вы можете встроить данный интерактивный виджет в любую CMS (Tilda, WordPress, Bitrix, React) через `<iframe>`:")
-
-        iframe_code = f"""<div style="width: 100%; max-width: 1200px; margin: 0 auto;">
-  <iframe
-    src="https://your-app-name.streamlit.app/?embed=true"
-    width="100%"
-    height="850px"
-    frameborder="0"
-    style="border: 1px solid #E2E8F0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"
-    allow="clipboard-write">
-  </iframe>
-</div>"""
-
-        st.code(iframe_code, language="html")
-        st.markdown("""
-        **Инструкция по развертыванию:**
-        1. Залейте данный репозиторий на **GitHub**.
-        2. Перейдите на **share.streamlit.io** и выберите ваш репозиторий с файлом `app.py`.
-        3. Замените `https://your-app-name.streamlit.app` в коде выше на URL вашего развернутого приложения.
-        4. Вставьте HTML-блок на страницу вашего сайта.
-        """)
