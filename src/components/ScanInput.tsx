@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { Search, Globe, Layers, ArrowRight, CheckCircle, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Search, Globe, Layers, ArrowRight } from 'lucide-react';
 import { PresetSite } from '../types';
 
 interface ScanInputProps {
   onStartScan: (url: string, deepScan: boolean, maxPages: number) => void;
   isLoading: boolean;
-  presets: PresetSite[];
+  presets?: PresetSite[];
 }
 
-export const ScanInput: React.FC<ScanInputProps> = ({ onStartScan, isLoading, presets }) => {
+export const ScanInput: React.FC<ScanInputProps> = ({ onStartScan, isLoading }) => {
   const [url, setUrl] = useState('https://gosuslugi.ru');
   const [deepScan, setDeepScan] = useState(true);
   const [maxPages, setMaxPages] = useState(5);
@@ -17,11 +17,6 @@ export const ScanInput: React.FC<ScanInputProps> = ({ onStartScan, isLoading, pr
     e.preventDefault();
     if (!url.trim()) return;
     onStartScan(url.trim(), deepScan, maxPages);
-  };
-
-  const handleSelectPreset = (presetUrl: string) => {
-    setUrl(presetUrl);
-    onStartScan(presetUrl, deepScan, maxPages);
   };
 
   return (
@@ -107,53 +102,6 @@ export const ScanInput: React.FC<ScanInputProps> = ({ onStartScan, isLoading, pr
             </div>
           </div>
         </form>
-
-        {/* Demo Presets Bar */}
-        {presets && presets.length > 0 && (
-          <div className="mt-8 pt-6 border-t border-[#F1F5F9]">
-            <div className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-3">
-              Быстрый тест профилей соответствия 152-ФЗ:
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {presets.map((preset) => {
-                const isCompliant = preset.expectedScore === 100;
-                const isMedium = preset.expectedScore >= 60 && preset.expectedScore < 90;
-                const isCritical = preset.expectedScore < 40;
-
-                return (
-                  <button
-                    key={preset.id}
-                    id={`preset-${preset.id}`}
-                    onClick={() => handleSelectPreset(preset.url)}
-                    disabled={isLoading}
-                    className="flex items-start justify-between p-3.5 rounded-2xl bg-[#F8FAFC] hover:bg-[#F1F5F9] border border-[#E2E8F0] hover:border-[#CBD5E1] transition-all text-left group"
-                  >
-                    <div className="pr-2 min-w-0">
-                      <div className="flex items-center gap-1.5 font-semibold text-xs text-[#0F172A] group-hover:text-[#2563EB] transition-colors truncate">
-                        {isCompliant && <CheckCircle className="w-3.5 h-3.5 text-[#16A34A] shrink-0" />}
-                        {isMedium && <AlertTriangle className="w-3.5 h-3.5 text-[#D97706] shrink-0" />}
-                        {isCritical && <ShieldAlert className="w-3.5 h-3.5 text-[#DC2626] shrink-0" />}
-                        <span className="truncate">{preset.name}</span>
-                      </div>
-                      <div className="text-[11px] text-[#64748B] font-mono mt-0.5 truncate">{preset.url}</div>
-                    </div>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 border ${
-                        isCompliant
-                          ? 'bg-[#DCFCE7] text-[#166534] border-[#BBF7D0]'
-                          : isMedium
-                          ? 'bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]'
-                          : 'bg-[#FEE2E2] text-[#991B1B] border-[#FECACA]'
-                      }`}
-                    >
-                      {preset.tag}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

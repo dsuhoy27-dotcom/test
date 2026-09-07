@@ -626,141 +626,189 @@ def run_full_audit(target_url: str) -> AuditReport:
 # ==========================================
 
 st.set_page_config(
-    page_title="Аудитор 152-ФЗ | Compliance Scanner",
+    page_title="Аудит соответствия 152-ФЗ",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Стилизация под строгий корпоративный Legal-Tech дашборд
+# Точное воспроизведение стилистики UI превью (шрифты, карточка, бейдж, кнопки)
 st.markdown("""
 <style>
-    .main { background-color: #F8FAFC; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    /* Фоновая подложка и базовые шрифты */
+    .stApp {
+        background-color: #F8FAFC;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    /* Скрытие стандартных служебных отступов Streamlit */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 1100px !important;
+    }
+    
+    /* Стилизация карточки ввода */
+    .hero-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 20px;
+        padding: 40px 32px 32px 32px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+        margin-bottom: 24px;
+        text-align: center;
+    }
+    
+    .pill-badge {
+        display: inline-block;
+        background-color: #EFF6FF;
+        color: #1D4ED8;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 6px 16px;
+        border-radius: 9999px;
+        margin-bottom: 16px;
+        border: 1px solid #DBEAFE;
+    }
+    
+    .hero-title {
+        font-size: 32px;
+        font-weight: 800;
+        color: #0F172A;
+        margin: 0 0 12px 0;
+        letter-spacing: -0.02em;
+    }
+    
+    .hero-subtitle {
+        font-size: 15px;
+        color: #64748B;
+        max-width: 680px;
+        margin: 0 auto 32px auto;
+        line-height: 1.6;
+    }
+
+    /* Поле ввода URL */
+    div[data-testid="stTextInput"] input {
+        border-radius: 14px !important;
+        border: 1px solid #CBD5E1 !important;
+        padding: 14px 18px !important;
+        font-size: 15px !important;
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    }
+    div[data-testid="stTextInput"] input:focus {
+        border-color: #2563EB !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+    }
+
+    /* Основная кнопка "Запустить аудит →" */
+    div[data-testid="stButton"] button[kind="primary"] {
+        background-color: #0F172A !important;
+        color: #FFFFFF !important;
+        border-radius: 14px !important;
+        font-size: 15px !important;
+        font-weight: 600 !important;
+        padding: 14px 24px !important;
+        border: none !important;
+        transition: all 0.15s ease-in-out !important;
+        box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.15) !important;
+    }
+    div[data-testid="stButton"] button[kind="primary"]:hover {
+        background-color: #1E293B !important;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px -2px rgba(15, 23, 42, 0.25) !important;
+    }
+
+    /* Табы отчета */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: transparent;
+        border-bottom: 1px solid #E2E8F0;
+        padding-bottom: 8px;
+    }
     .stTabs [data-baseweb="tab"] {
-        padding: 8px 16px;
-        background-color: #F1F5F9;
-        border-radius: 6px;
-        font-weight: 500;
-        font-size: 14px;
+        padding: 10px 18px;
+        background-color: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 13px;
+        color: #475569;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #2563EB !important;
-        color: white !important;
+        background-color: #0F172A !important;
+        color: #FFFFFF !important;
+        border-color: #0F172A !important;
     }
-    .metric-card {
-        background: white;
-        padding: 16px 20px;
-        border-radius: 8px;
+
+    /* Метрики */
+    div[data-testid="stMetric"] {
+        background: #FFFFFF;
         border: 1px solid #E2E8F0;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        border-radius: 14px;
+        padding: 16px 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🛡️ Автоматическая проверка сайтов на соответствие 152-ФЗ")
-st.caption("Микросервис юридическо-технического комплаенса: GeoIP РФ, формы, битые ссылки согласий, Cookie-баннеры и расчет штрафов КоАП РФ")
-
-# Блок ввода URL
-col_input, col_btn = st.columns([5, 1])
-with col_input:
-    url_input = st.text_input(
-        "Адрес проверяемого сайта",
-        placeholder="https://example.ru",
-        label_visibility="collapsed"
-    )
-with col_btn:
-    start_audit = st.button("🔍 Проверить", type="primary", use_container_width=True)
-
-# Быстрые пресеты для тестирования
-st.markdown("<div style='font-size: 12px; color: #64748B; margin-top: -10px;'>Тестовые пресеты:</div>", unsafe_allow_html=True)
-col_p1, col_p2, col_p3 = st.columns(3)
-if col_p1.button("🛒 Интернет-магазин (Нарушения согласий)", use_container_width=True):
-    url_input = "https://preset-shop-demo.ru"
-    start_audit = True
-if col_p2.button("☁️ Зарубежный SaaS (Нарушение локализации РФ)", use_container_width=True):
-    url_input = "https://foreign-cloud-saas.com"
-    start_audit = True
-if col_p3.button("🏛️ Образцовый портал (100% 152-ФЗ)", use_container_width=True):
-    url_input = "https://compliant-portal.ru"
-    start_audit = True
-
-# Сессионное хранилище отчета
+# Инициализация сессионного хранилища
 if "current_report" not in st.session_state:
     st.session_state.current_report = None
 
-if start_audit and url_input:
-    with st.spinner("⏳ Выполняется сканирование DOM, проверка GeoIP и валидация ссылок согласий..."):
-        # Демо-заглушки для пресетов, чтобы моментально показать логику на тестовых адресах
-        if "preset-shop-demo.ru" in url_input:
-            report = AuditReport(
-                target_url=url_input,
-                audit_date=datetime.now().strftime("%d.%m.%Y %H:%M"),
-                compliance_score=55,
-                risk_level="ВЫСОКИЙ",
-                max_potential_fine_rub=360000,
-                ssl_audit=SslAudit(is_https=True, is_valid=True, issuer="Let's Encrypt"),
-                localization_audit=LocalizationAudit(ip_address="185.129.100.45", country_name="Россия", country_code="RU", is_located_in_rf=True),
-                privacy_policy_audit=PrivacyPolicyAudit(found=True, is_accessible_200=False, http_status_code=404, policy_urls=["https://preset-shop-demo.ru/privacy"], violations=["Ссылка на Политику возвращает HTTP 404 (Not Found)"]),
-                cookie_audit=CookieBannerAudit(detected=False, third_party_trackers=["Яндекс.Метрика", "VK Pixel"], violations=["Отсутствует Cookie-баннер при активных трекерах аналитики"]),
-                forms_audit=[
-                    FormAuditResult(
-                        form_id="checkout-form",
-                        form_selector="form#checkout-form",
-                        page_url=url_input,
-                        fields_count=5,
-                        personal_data_fields=[
-                            FormField(field_type="text", name="fio", pd_category="ФИО", is_personal_data=True),
-                            FormField(field_type="tel", name="phone", pd_category="Телефон", is_personal_data=True)
-                        ],
-                        checkbox_analysis=CheckboxAnalysis(
-                            exists=False,
-                            policy_link_url="https://preset-shop-demo.ru/privacy",
-                            policy_link_status_code=404,
-                            policy_link_is_broken=True
-                        ),
-                        is_compliant=False,
-                        violations=["Отсутствует чекбокс согласия", "Битая ссылка на политику в форме (HTTP 404)"]
-                    )
-                ],
-                violations=[
-                    LegalViolation(
-                        code="POLICY_LINK_BROKEN",
-                        severity="HIGH",
-                        koap_article="ст. 13.11 ч. 3 КоАП РФ (ст. 18.1 152-ФЗ)",
-                        title="Ссылка на Политику конфиденциальности возвращает ошибку 404",
-                        description="Ссылка в футере и форме оформлена, но ведет на несуществующую страницу.",
-                        location=f"{url_input}/privacy",
-                        fine_range_rub="от 30 000 ₽ до 60 000 ₽",
-                        remediation_guide="Разместите рабочий текст документа по указанному URL."
-                    ),
-                    LegalViolation(
-                        code="FORM_NO_CONSENT_CHECKBOX",
-                        severity="HIGH",
-                        koap_article="ст. 13.11 ч. 1, 2 КоАП РФ (ст. 9 152-ФЗ)",
-                        title="В форме заказа отсутствует чекбокс согласия",
-                        description="Форма собирает ФИО и телефон без получения явного волеизъявления покупателя.",
-                        location="form#checkout-form",
-                        fine_range_rub="от 60 000 ₽ до 150 000 ₽",
-                        remediation_guide="Добавьте обязательный неотмеченный чекбокс согласия."
-                    ),
-                    LegalViolation(
-                        code="COOKIE_BANNER_MISSING",
-                        severity="HIGH",
-                        koap_article="ст. 13.11 ч. 1 КоАП РФ (ст. 6, 9 152-ФЗ)",
-                        title="Отсутствует Cookie-баннер при наличии Яндекс.Метрики и VK Pixel",
-                        description="Используются сторонние пиксели без предупреждения пользователя.",
-                        location="DOM / Scripts",
-                        fine_range_rub="до 100 000 ₽",
-                        remediation_guide="Установите модальный баннер согласия с файлами Cookie."
-                    )
-                ],
-                summary_text="Сайт имеет высокий риск штрафов Роскомнадзора. Выявлена битая ссылка на Политику (404) и отсутствие согласия в корзине."
-            )
-        else:
-            report = run_full_audit(url_input)
-        
-        st.session_state.current_report = report
+# Если отчет уже сформирован — показываем кнопку сброса для нового анализа
+if st.session_state.current_report:
+    col_back, _ = st.columns([2, 8])
+    with col_back:
+        if st.button("← Проверить другой сайт", use_container_width=True):
+            st.session_state.current_report = None
+            st.rerun()
+
+# Отображение главного блока сканирования (точно как в превью)
+if not st.session_state.current_report:
+    st.markdown("""
+    <div class="hero-card">
+        <div class="pill-badge">АУДИТ СООТВЕТСТВИЯ ЗАКОНУ</div>
+        <h1 class="hero-title">Комплексный аудит сайта на соблюдение 152-ФЗ</h1>
+        <p class="hero-subtitle">
+            Автоматический анализ веб-форм, чекбоксов согласия, Политики конфиденциальности,
+            Cookie-баннеров, SSL-сертификата и локализации серверов в РФ по ст. 13.11 КоАП РФ.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Строка ввода URL и кнопка запуска
+    col_input, col_btn = st.columns([4, 2])
+    with col_input:
+        url_input = st.text_input(
+            "Адрес проверяемого сайта",
+            placeholder="https://gosuslugi.ru",
+            label_visibility="collapsed"
+        )
+    with col_btn:
+        start_audit = st.button("🔍 Запустить аудит →", type="primary", use_container_width=True)
+
+    # Опции проверки
+    col_opt1, col_opt2 = st.columns([3, 2])
+    with col_opt1:
+        deep_scan = st.checkbox("Глубокий анализ (до 5 связанных страниц и вложенных форм)", value=True)
+    with col_opt2:
+        page_limit = st.selectbox(
+            "Лимит страниц:",
+            options=["5 страниц", "10 страниц", "Только главная (1 страница)"],
+            index=0,
+            label_visibility="collapsed"
+        )
+
+    if start_audit and url_input:
+        clean_url = url_input.strip()
+        with st.spinner("⏳ Выполняется комплексный аудит DOM, валидация согласий и проверка GeoIP РФ..."):
+            report = run_full_audit(clean_url)
+            st.session_state.current_report = report
+            st.rerun()
 
 # Отображение дашборда отчета
 report: Optional[AuditReport] = st.session_state.current_report
